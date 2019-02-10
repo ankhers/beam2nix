@@ -44,9 +44,7 @@ body(App) ->
               kv("version", quote(App#app.vsn)),
               kv("src", App#app.src)
              ],
-    lists:foldr(fun(Doc, Acc) ->
-                        above(Doc, Acc)
-                end, prettypr:empty(), Chunks).
+    lists:foldr(fun prettypr:above/2, prettypr:empty(), Chunks).
 
 -spec quote(string()) -> prettypr:document().
 quote(Value) ->
