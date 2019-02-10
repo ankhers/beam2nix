@@ -1,17 +1,17 @@
 -module(beam2nix).
 
 %% API exports
--export([new/3]).
+-export([new/4]).
 
--import(prettypr, [above/2, text/1]).
+-import(prettypr, [above/2]).
 
--record(app, {name, vsn, src}).
+-record(app, {name, vsn, src, deps}).
 %%====================================================================
 %% API functions
 %%====================================================================
--spec new(atom(), string(), string()) -> prettypr:document().
-new(AppName, Vsn, Src) ->
-    App = #app{name = AppName, vsn = Vsn, src = Src},
+-spec new(atom(), string(), string(), [{binary(), binary()}]) -> prettypr:document().
+new(AppName, Vsn, Src, Deps) ->
+    App = #app{name = AppName, vsn = Vsn, src = Src, deps = Deps},
     above(
       header(),
       derivation(App)
@@ -42,9 +42,24 @@ body(App) ->
     Chunks = [
               kv("name", quote(atom_to_list(App#app.name))),
               kv("version", quote(App#app.vsn)),
-              kv("src", App#app.src)
+              kv("src", App#app.src),
+              kv("checkouts", deps(App#app.deps))
              ],
     lists:foldr(fun prettypr:above/2, prettypr:empty(), Chunks).
+
+-spec deps([{binary(), binary()}]) -> prettypr:document().
+deps(Deps) ->
+    DepsDocs = lists:map(fun({Name, Vsn}) ->
+                                 Vsn1 = re:replace(Vsn, "\\.", "_", [global, {return, list}]),
+                                    prettypr:beside(
+                                      text(Name),
+                                      prettypr:beside(
+                                        text("_"),
+                                        text(Vsn1)
+                                       )
+                                     )
+                         end, Deps),
+    prettypr:sep(lists:flatten([text("["), DepsDocs, text("]")])).
 
 -spec quote(string()) -> prettypr:document().
 quote(Value) ->
@@ -59,3 +74,9 @@ kv(Key, Value) ->
 -spec nest(prettypr:document()) -> prettypr:document().
 nest(Document) ->
     prettypr:nest(2, Document).
+
+-spec text(binary() | string()) -> prettypr:document().
+text(Bin) when is_binary(Bin) ->
+    prettypr:text(erlang:binary_to_list(Bin));
+text(Str) when is_list(Str) ->
+    prettypr:text(Str).
