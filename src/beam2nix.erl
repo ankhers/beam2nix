@@ -43,23 +43,36 @@ body(App) ->
               kv("name", quote(atom_to_list(App#app.name))),
               kv("version", quote(App#app.vsn)),
               kv("src", App#app.src),
-              kv("checkouts", deps(App#app.deps))
+              % kv("checkouts", deps(App#app.deps))
+              deps_docs(App#app.deps)
              ],
-    lists:foldr(fun prettypr:above/2, prettypr:empty(), Chunks).
+    above(Chunks).
+    %% lists:foldr(fun prettypr:above/2, prettypr:empty(), Chunks).
 
+deps_docs(Deps) ->
+    case deps(Deps) of
+        [] ->
+            kv("checkouts", "[ ]");
+        DepsDocs ->
+            above([
+                   prettypr:sep([text("checkouts = [")]),
+                   nest(above(DepsDocs)),
+                   text("];")
+                  ])
+    end.
+
+%% TODO: Properly format for large lists of values
 -spec deps([{binary(), binary()}]) -> prettypr:document().
 deps(Deps) ->
-    DepsDocs = lists:map(fun({Name, Vsn}) ->
-                                 Vsn1 = re:replace(Vsn, "\\.", "_", [global, {return, list}]),
-                                    prettypr:beside(
-                                      text(Name),
-                                      prettypr:beside(
-                                        text("_"),
-                                        text(Vsn1)
-                                       )
-                                     )
-                         end, Deps),
-    prettypr:sep(lists:flatten([text("["), DepsDocs, text("]")])).
+    lists:map(fun({Name, Vsn}) ->
+                      prettypr:beside(
+                        text(Name),
+                        prettypr:beside(
+                          text("_"),
+                          text(fix_version(Vsn))
+                         )
+                       )
+              end, Deps).
 
 -spec quote(string()) -> prettypr:document().
 quote(Value) ->
@@ -67,9 +80,9 @@ quote(Value) ->
 
 -spec kv(string(), string() | prettypr:document()) -> prettypr:document().
 kv(Key, Value) when is_list(Value) ->
-    prettypr:sep([text(Key), text("="), text(Value)]);
+    prettypr:beside(prettypr:sep([text(Key), text("="), text(Value)]), text(";"));
 kv(Key, Value) ->
-    prettypr:sep([text(Key), text("="), Value]).
+    prettypr:beside(prettypr:sep([text(Key), text("="), Value]), text(";")).
 
 -spec nest(prettypr:document()) -> prettypr:document().
 nest(Document) ->
@@ -80,3 +93,9 @@ text(Bin) when is_binary(Bin) ->
     prettypr:text(erlang:binary_to_list(Bin));
 text(Str) when is_list(Str) ->
     prettypr:text(Str).
+
+above(List) when is_list(List) ->
+    lists:foldr(fun prettypr:above/2, prettypr:empty(), List).
+
+fix_version(Vsn) ->
+    re:replace(Vsn, "\\.", "_", [global, {return, list}]).
