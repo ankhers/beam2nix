@@ -28,9 +28,11 @@ new(AppName, Vsn, Src, Deps, Kind) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+-spec builds(#app{}) -> prettypr:document().
 builds(App) ->
     above([app(App), deps(App#app.deps)]).
 
+-spec app(#app{}) -> prettypr:document().
 app(App) ->
     Name = dep_name({App#app.name, App#app.vsn}),
     above(
@@ -107,6 +109,7 @@ body(App) ->
              ],
     above(Chunks).
 
+-spec deps_list([{binary(), binary()}]) -> prettypr:document().
 deps_list(Deps) ->
     case deps_names(Deps) of
         [] ->
@@ -124,12 +127,13 @@ deps_list(Deps) ->
 deps_names(Deps) ->
     lists:map(fun dep_name/1, Deps).
 
--spec dep_name({binary(), binary()}) -> prettypr:document().
+-spec dep_name({binary() | atom(), binary()}) -> prettypr:document().
 dep_name({Name, Vsn}) when is_atom(Name) ->
     do_dep_name(atom_to_list(Name), Vsn);
 dep_name({Name, Vsn}) ->
     do_dep_name(Name, Vsn).
 
+-spec do_dep_name(binary() | string(), binary()) -> prettypr:document().
 do_dep_name(Name, Vsn) ->
     prettypr:beside(
       text(Name),
@@ -159,8 +163,10 @@ text(Bin) when is_binary(Bin) ->
 text(Str) when is_list(Str) ->
     prettypr:text(Str).
 
+-spec above([prettypr:document()]) -> prettypr:document().
 above(List) when is_list(List) ->
     lists:foldr(fun prettypr:above/2, prettypr:empty(), List).
 
+-spec fix_version(binary()) -> string().
 fix_version(Vsn) ->
     re:replace(Vsn, "\\.", "_", [global, {return, list}]).
