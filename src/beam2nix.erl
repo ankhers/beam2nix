@@ -12,28 +12,40 @@
 -spec new(atom(), string(), string(), [{binary(), binary()}], atom()) -> prettypr:document().
 new(AppName, Vsn, Src, Deps, Kind) ->
     App = #app{name = AppName, vsn = Vsn, src = Src, deps = Deps, kind = Kind},
-    above(
-      header(App#app.deps),
-      derivation(App)
-     ).
+    Name = dep_name({AppName, Vsn}),
+    above([
+           header(),
+           nest(builds(App)),
+           text("in"),
+           text(""),
+           prettypr:sep([
+                text("  beamPackages.callPackage"),
+                Name,
+                text("{ }")
+               ])
+          ]).
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
--spec header([{binary(), binary()}]) -> prettypr:document().
-header([]) ->
+builds(App) ->
+    above([app(App), deps(App#app.deps)]).
+
+app(App) ->
+    Name = dep_name({App#app.name, App#app.vsn}),
     above(
-      text("{ rebar3Relx }:"),
-      text("")
-     );
-header(Deps) ->
+      prettypr:beside(Name, text(" = { rebar3Relx }:")),
+      nest(derivation(App))
+     ).
+
+-spec header() -> prettypr:document().
+header() ->
     above([
-           text("{ rebar3Relx, fetchHex }:"),
+           text("{ pkgs ? import <nixpkgs> { } }:"),
+           text(""),
+           text("with pkgs;"),
            text(""),
            text("let"),
-           text(""),
-           nest(deps(Deps)),
-           text("in"),
            text("")
           ]
      ).
@@ -80,7 +92,7 @@ derivation(App) ->
       text("rebar3Relx {"),
       above(
         nest(body(App)),
-        text("}")
+        text("};")
            )
      ).
 
@@ -113,7 +125,12 @@ deps_names(Deps) ->
     lists:map(fun dep_name/1, Deps).
 
 -spec dep_name({binary(), binary()}) -> prettypr:document().
+dep_name({Name, Vsn}) when is_atom(Name) ->
+    do_dep_name(atom_to_list(Name), Vsn);
 dep_name({Name, Vsn}) ->
+    do_dep_name(Name, Vsn).
+
+do_dep_name(Name, Vsn) ->
     prettypr:beside(
       text(Name),
       prettypr:beside(
