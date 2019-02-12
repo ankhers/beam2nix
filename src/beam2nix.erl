@@ -35,10 +35,11 @@ builds(App) ->
 -spec app(#app{}) -> prettypr:document().
 app(App) ->
     Name = dep_name({App#app.name, App#app.vsn}),
-    above(
-      prettypr:beside(Name, text(" = { rebar3Relx }:")),
-      nest(derivation(App))
-     ).
+    above([
+           prettypr:beside(Name, text(" = { rebar3Relx }:")),
+           nest(derivation(App)),
+           text(" ")
+          ]).
 
 -spec header() -> prettypr:document().
 header() ->
