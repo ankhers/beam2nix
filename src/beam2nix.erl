@@ -1,17 +1,24 @@
 -module(beam2nix).
 
 %% API exports
--export([new/5]).
+-export([new/1]).
 
 -import(prettypr, [above/2]).
 
--record(app, {name, vsn, src, deps, kind}).
+-type(app() :: #{
+                 name := atom(),
+                 vsn := string(),
+                 src := string(),
+                 deps := [{binary(), binary()}],
+                 release_type := atom(),
+                 otp_vsn => string()
+                }).
+-export_type([app/0]).
 %%====================================================================
 %% API functions
 %%====================================================================
--spec new(atom(), string(), string(), [{binary(), binary()}], atom()) -> prettypr:document().
-new(AppName, Vsn, Src, Deps, Kind) ->
-    App = #app{name = AppName, vsn = Vsn, src = Src, deps = Deps, kind = Kind},
+-spec new(app()) -> prettypr:document().
+new(#{name := AppName, vsn := Vsn} = App) ->
     Name = dep_name({AppName, Vsn}),
     above([
            header(),
@@ -28,13 +35,13 @@ new(AppName, Vsn, Src, Deps, Kind) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
--spec builds(#app{}) -> prettypr:document().
-builds(App) ->
-    above([app(App), deps(App#app.deps)]).
+-spec builds(app()) -> prettypr:document().
+builds(#{deps := Deps} = App) ->
+    above([app(App), deps(Deps)]).
 
--spec app(#app{}) -> prettypr:document().
-app(App) ->
-    Name = dep_name({App#app.name, App#app.vsn}),
+-spec app(app()) -> prettypr:document().
+app(#{name := AppName, vsn := Vsn} = App) ->
+    Name = dep_name({AppName, Vsn}),
     above([
            prettypr:beside(Name, text(" = { rebar3Relx }:")),
            nest(derivation(App)),
@@ -89,7 +96,7 @@ sha256(Name, Vsn) ->
 url(Name, Vsn) ->
     "https://repo.hex.pm/tarballs/" ++ binary_to_list(Name) ++ "-" ++ binary_to_list(Vsn) ++ ".tar".
 
--spec derivation(#app{}) -> prettypr:document().
+-spec derivation(app()) -> prettypr:document().
 derivation(App) ->
     above(
       text("rebar3Relx {"),
@@ -99,14 +106,14 @@ derivation(App) ->
            )
      ).
 
--spec body(#app{}) -> prettypr:document().
-body(App) ->
+-spec body(app()) -> prettypr:document().
+body(#{name := Name, vsn := Vsn, src := Src, deps := Deps, release_type := ReleaseType}) ->
     Chunks = [
-              kv("name", quote(atom_to_list(App#app.name))),
-              kv("version", quote(App#app.vsn)),
-              kv("src", App#app.src),
-              deps_list(App#app.deps),
-              kv("releaseType", quote(atom_to_list(App#app.kind)))
+              kv("name", quote(atom_to_list(Name))),
+              kv("version", quote(Vsn)),
+              kv("src", Src),
+              deps_list(Deps),
+              kv("releaseType", quote(atom_to_list(ReleaseType)))
              ],
     above(Chunks).
 
@@ -114,16 +121,15 @@ body(App) ->
 deps_list(Deps) ->
     case deps_names(Deps) of
         [] ->
-            kv("checkouts", "[ ]");
+            prettypr:empty();
         DepsDocs ->
             above([
-                   prettypr:sep([text("checkouts = [")]),
+                   prettypr:sep([text("beamDeps = [")]),
                    nest(above(DepsDocs)),
                    text("];")
                   ])
     end.
 
-%% TODO: Properly format for large lists of values
 -spec deps_names([{binary(), binary()}]) -> [prettypr:document()].
 deps_names(Deps) ->
     lists:map(fun dep_name/1, Deps).
