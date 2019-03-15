@@ -19,7 +19,7 @@
 %%====================================================================
 -spec new(app()) -> prettypr:document().
 new(#{name := AppName, vsn := Vsn} = App) ->
-    Name = dep_name({AppName, Vsn}),
+    Name = app_name(AppName, Vsn),
     above([
            header(),
            nest(builds(App)),
@@ -41,7 +41,7 @@ builds(#{deps := Deps} = App) ->
 
 -spec app(app()) -> prettypr:document().
 app(#{name := AppName, vsn := Vsn} = App) ->
-    Name = dep_name({AppName, Vsn}),
+    Name = app_name(AppName, Vsn),
     above([
            prettypr:beside(Name, text(" = { rebar3Relx }:")),
            nest(derivation(App)),
@@ -67,33 +67,65 @@ deps(Deps) ->
                 end, prettypr:empty(), Deps).
 
 -spec dep_doc({binary(), binary()}) -> prettypr:document().
-dep_doc(Dep) ->
+dep_doc({hex, Name, Vsn}) ->
     above([
-           prettypr:beside(dep_name(Dep), text(" = fetchHex {")),
-           nest(dep_attrs(Dep)),
+           prettypr:beside(do_dep_name(Name, Vsn), text(" = fetchHex {")),
+           nest(hex_attrs(Name, Vsn)),
+           text("};"),
+           text("")
+          ]);
+dep_doc({git, Name, Repo, Meta}) ->
+    GitVsn = git_vsn(Meta),
+    above([
+           prettypr:beside(do_dep_name(Name, GitVsn), text(" = fetchgit {")),
+           nest(git_attrs(Repo, GitVsn)),
            text("};"),
            text("")
           ]).
 
--spec dep_attrs({binary(), binary()}) -> prettypr:document().
-dep_attrs({Name, Vsn}) ->
+-spec git_vsn({atom(), binary()}) -> binary().
+git_vsn({ref, Ref}) ->
+    Ref;
+git_vsn({branch, Branch}) ->
+    Branch;
+git_vsn({tag, Tag}) ->
+    Tag.
+
+-spec hex_attrs(binary(), binary()) -> prettypr:document().
+hex_attrs(Name, Vsn) ->
     above([
            kv("pkg", quote(binary_to_list(Name))),
            kv("version", quote(binary_to_list(Vsn))),
-           kv("sha256", quote(sha256(Name, Vsn)))
+           kv("sha256", quote(hex_sha256(Name, Vsn)))
+          ]).
+
+-spec git_attrs(string(), string()) -> prettypr:document().
+git_attrs(Repo, GitVsn) ->
+    above([
+           kv("url", quote(Repo)),
+           kv("rev", quote(GitVsn)),
+           kv("sha256", quote(git_sha256(Repo, GitVsn)))
           ]).
 
 %% TODO: This is really slow. Probably want to async grab all the hashes and
 %%       then try to build the document.
--spec sha256(binary(), binary()) -> string().
-sha256(Name, Vsn) ->
+-spec hex_sha256(binary(), binary()) -> string().
+hex_sha256(Name, Vsn) ->
     %% "https://repo.hex.pm/tarballs/${pkg}-${version}.tar";
-    Output = os:cmd("nix-prefetch-url " ++ url(Name, Vsn)),
+    Output = os:cmd("nix-prefetch-url " ++ hex_url(Name, Vsn)),
     [_, Sha, _] = string:split(Output, "\n", all),
     Sha.
 
--spec url(binary(), binary()) -> string().
-url(Name, Vsn) ->
+-spec git_sha256(string(), string()) -> string().
+git_sha256(Repo, Vsn) ->
+    Output = os:cmd("nix-prefetch-git " ++ Repo ++ " --rev " ++ Vsn),
+    Bin = list_to_binary(Output),
+    {match, [_, {Start, Size}]} = re:run(Bin, "\"sha256\": \"([\\w\\d]+)\""),
+    <<_:Start/binary, Sha:Size/binary, _/binary>> = Bin,
+    binary_to_list(Sha).
+
+-spec hex_url(binary(), binary()) -> string().
+hex_url(Name, Vsn) ->
     "https://repo.hex.pm/tarballs/" ++ binary_to_list(Name) ++ "-" ++ binary_to_list(Vsn) ++ ".tar".
 
 -spec derivation(app()) -> prettypr:document().
@@ -134,11 +166,16 @@ deps_list(Deps) ->
 deps_names(Deps) ->
     lists:map(fun dep_name/1, Deps).
 
+-spec app_name(atom(), binary()) -> prettypr:document().
+app_name(Name, Vsn) ->
+    do_dep_name(atom_to_list(Name), Vsn).
+
 -spec dep_name({binary() | atom(), binary()}) -> prettypr:document().
-dep_name({Name, Vsn}) when is_atom(Name) ->
-    do_dep_name(atom_to_list(Name), Vsn);
-dep_name({Name, Vsn}) ->
-    do_dep_name(Name, Vsn).
+dep_name({hex, Name, Vsn}) ->
+    do_dep_name(Name, Vsn);
+dep_name({git, Name, _Repo,  Meta}) ->
+    GitVsn = git_vsn(Meta),
+    do_dep_name(Name, GitVsn).
 
 -spec do_dep_name(binary() | string(), binary()) -> prettypr:document().
 do_dep_name(Name, Vsn) ->
