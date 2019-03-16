@@ -18,7 +18,7 @@
 %% API functions
 %%====================================================================
 -spec new(app()) -> prettypr:document().
-new(#{name := AppName, vsn := Vsn} = App) ->
+new(#{name := AppName, vsn := Vsn, otp_vsn := OTPVsn} = App) ->
     Name = app_name(AppName, Vsn),
     above([
            header(),
@@ -26,7 +26,7 @@ new(#{name := AppName, vsn := Vsn} = App) ->
            text("in"),
            text(""),
            prettypr:sep([
-                text("  beamPackages.callPackage"),
+                text("  beam.packages.erlangR" ++ OTPVsn ++ ".callPackage"),
                 Name,
                 text("{ }")
                ])
